@@ -397,94 +397,97 @@ runs:
         CONFIG_TMPFS_XATTR=y
         CONFIG_TMPFS_POSIX_ACL=y
         EOF
-    - name: Add Verus TCP Congestion Control
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform/common/net/ipv4"
+  - name: Add Verus TCP Congestion Control
+    shell: bash
+    run: |
+      set -euo pipefail
+      cd "$CONFIG/kernel_platform/common/net/ipv4"
 
-        # Add tcp_verus.c source file
-        cat << 'EOF' > tcp_verus.c
-        // ----------------- VERUS TCP BEGIN -----------------
-        #include <linux/module.h>
-        #include <net/tcp.h>
+      # Add tcp_verus.c source file
+      cat << 'EOF' > tcp_verus.c
+      // ----------------- VERUS TCP BEGIN -----------------
+      #include <linux/module.h>
+      #include <linux/kernel.h>
+      #include <linux/init.h>
+      #include <net/tcp.h>
+      #include <net/inet_connection_sock.h>
 
-        struct verus {
-            u32 ssthresh;
-        };
+      struct verus {
+          u32 ssthresh;
+      };
 
-        static void verus_init(struct sock *sk)
-        {
-            struct tcp_sock *tp = tcp_sk(sk);
-            struct verus *ca = inet_csk_ca(sk);
-            ca->ssthresh = TCP_INFINITE_SSTHRESH;
-            tp->snd_cwnd = 2;
-        }
+      static void verus_init(struct sock *sk)
+      {
+          struct tcp_sock *tp = tcp_sk(sk);
+          struct verus *ca = inet_csk_ca(sk);
+          ca->ssthresh = TCP_INFINITE_SSTHRESH;
+          tp->snd_cwnd = 2;
+      }
 
-        static void verus_state(struct sock *sk, u8 new_state)
-        {
-            if (new_state == TCP_CA_Loss) {
-                struct tcp_sock *tp = tcp_sk(sk);
-                struct verus *ca = inet_csk_ca(sk);
-                ca->ssthresh = max(tp->snd_cwnd >> 1U, 2U);
-            }
-        }
+      static void verus_state(struct sock *sk, u8 new_state)
+      {
+          if (new_state == TCP_CA_Loss) {
+              struct tcp_sock *tp = tcp_sk(sk);
+              struct verus *ca = inet_csk_ca(sk);
+              ca->ssthresh = max(tp->snd_cwnd >> 1U, 2U);
+          }
+      }
 
-        static void verus_cong_avoid(struct sock *sk, u32 ack, u32 acked)
-        {
-            struct tcp_sock *tp = tcp_sk(sk);
-            if (tp->snd_cwnd <= tcp_sk(sk)->snd_ssthresh)
-                tcp_slow_start(tp, acked);
-            else
-                tcp_cong_avoid_ai(tp, tp->snd_cwnd, acked);
-        }
+      static void verus_cong_avoid(struct sock *sk, u32 ack, u32 acked)
+      {
+          struct tcp_sock *tp = tcp_sk(sk);
+          if (tp->snd_cwnd <= verus_ssthresh(sk))
+              tcp_slow_start(tp, acked);
+          else
+              tcp_cong_avoid_ai(tp, tp->snd_cwnd, acked);
+      }
 
-        static u32 verus_ssthresh(struct sock *sk)
-        {
-            const struct tcp_sock *tp = tcp_sk(sk);
-            return max(tp->snd_cwnd >> 1U, 2U);
-        }
+      static u32 verus_ssthresh(struct sock *sk)
+      {
+          struct tcp_sock *tp = tcp_sk(sk);
+          return max(tp->snd_cwnd >> 1U, 2U);
+      }
 
-        static struct tcp_congestion_ops verus __read_mostly = {
-            .init       = verus_init,
-            .ssthresh   = verus_ssthresh,
-            .cong_avoid = verus_cong_avoid,
-            .set_state  = verus_state,
-            .owner      = THIS_MODULE,
-            .name       = "verus",
-        };
+      static struct tcp_congestion_ops verus __read_mostly = {
+          .init       = verus_init,
+          .ssthresh   = verus_ssthresh,
+          .cong_avoid = verus_cong_avoid,
+          .set_state  = verus_state,
+          .owner      = THIS_MODULE,
+          .name       = "verus",
+      };
 
-        static int __init verus_register(void)
-        {
-            BUILD_BUG_ON(sizeof(struct verus) > ICSK_CA_PRIV_SIZE);
-            return tcp_register_congestion_control(&verus);
-        }
+      static int __init verus_register(void)
+      {
+          BUILD_BUG_ON(sizeof(struct verus) > ICSK_CA_PRIV_SIZE);
+          return tcp_register_congestion_control(&verus);
+      }
 
-        static void __exit verus_unregister(void)
-        {
-            tcp_unregister_congestion_control(&verus);
-        }
+      static void __exit verus_unregister(void)
+      {
+          tcp_unregister_congestion_control(&verus);
+      }
 
-        module_init(verus_register);
-        module_exit(verus_unregister);
+      module_init(verus_register);
+      module_exit(verus_unregister);
 
-        MODULE_AUTHOR("Verus TCP");
-        MODULE_LICENSE("GPL");
-        MODULE_DESCRIPTION("Verus TCP Congestion Control");
-        // ----------------- VERUS TCP END -----------------
-        EOF
+      MODULE_AUTHOR("Verus TCP");
+      MODULE_LICENSE("GPL");
+      MODULE_DESCRIPTION("Verus TCP Congestion Control");
+      // ----------------- VERUS TCP END -----------------
+      EOF
 
-        # Add entry to Makefile
-        echo 'obj-$(CONFIG_TCP_CONG_VERUS) += tcp_verus.o' >> Makefile
+    # Add entry to Makefile
+    echo 'obj-$(CONFIG_TCP_CONG_VERUS) += tcp_verus.o' >> Makefile
 
-        # Add entry to Kconfig
-        cat << 'EOF' >> Kconfig
-        config TCP_CONG_VERUS
-            tristate "Verus TCP congestion control"
-            default y
-            help
-              Verus congestion control algorithm for low-latency, high-throughput networks.
-        EOF
+    # Add entry to Kconfig
+    cat << 'EOF' >> Kconfig
+    config TCP_CONG_VERUS
+        tristate "Verus TCP congestion control"
+        default y
+        help
+          Verus congestion control algorithm for low-latency, high-throughput networks.
+    EOF
 
     - name: Add Oneplus BBR
       shell: bash
