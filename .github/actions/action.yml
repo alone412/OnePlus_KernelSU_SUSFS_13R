@@ -408,6 +408,9 @@ runs:
         CONFIG_TCP_CONG_BBR=y
         CONFIG_NET_SCH_FQ=y
         CONFIG_NET_SCH_FQ_CODEL=y
+        CONFIG_TCP_CONG_HSTCP=y
+        CONFIG_TCP_CONG_WESTWOOD=y
+        CONFIG_NET_SCH_CAKE=y
         EOF
 
     - name: Add TTL Target Support
