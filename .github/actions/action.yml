@@ -412,6 +412,7 @@ runs:
         CONFIG_TCP_CONG_WESTWOOD=y
         CONFIG_NET_SCH_CAKE=y
         CONFIG_HZ_1000=y
+        CONFIG_SCHED_CORE=y
         EOF
 
     - name: Add TTL Target Support
